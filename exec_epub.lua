@@ -167,12 +167,18 @@ function make_opf()
       -- The lg_file has been already loaded by make4ht, it doesn't make sense to load it again
       -- Furthermore, it is now possible to add new files from Lua build files
       local lg_file = Make.lgfile  or ebookutils.parse_lg(outputfilename..".lg")
-			local used_files = lg_file["files"]
+			local used_files = {}
+      for _,filename in ipairs(lg_file["files"]) do
+        -- we need to test the filenames in order to prevent duplicates
+        -- filenames are tested without paths, so there may be issues if 
+        -- the same filename is used in different directories. Is that a problem?
+        used_files[filename] = true
+      end
 			--[[for f in lfs.dir("./OEBPS") do
 			--table.insert(used_files,f)
 			--used_files[f] = true
 			end--]]
-			local all_html = find_all_files(table.concat(used_files,"\n"))
+			-- local all_html = find_all_files(table.concat(used_files,"\n"))
 			local outside_spine = {}
 			-- This was duplicated code
 			--[[for i, ext in pairs(all_html) do
@@ -185,6 +191,7 @@ function make_opf()
 			end--]]
 			local all_used_files = find_all_files(opf_complete[1],"([%a%d%-%_]+%.[%a%d]+)")
 			local used_paths = {}
+      local used_ids   = {}
 			for _,k in ipairs(lg_file["files"]) do
 				local ext = k:match("%.([%a%d]*)$")
 				local parts = k:split "/"
@@ -212,19 +219,25 @@ function make_opf()
 						end
 					end
 					ebookutils.copy(k, outputdir .. "/"..k)
-					if not all_used_files[fn] then
+					if not all_used_files[fn] and not used_ids[id] then
 						table.insert(opf_complete,item)
 						if allow_in_spine[ext] then 
 						table.insert(outside_spine,id)
 						end
 					end
+          used_ids[id] = true
 				end
 			end
 			for _,f in ipairs(lg_file["images"]) do
 				local f = f.output
-				local p = lg_item(f)
-				ebookutils.copy(f, outputdir .. "/"..f)
-				table.insert(opf_complete,p)
+        local p, id = lg_item(f)
+        -- process the images only if they weren't registered in lg_file["files"]
+        -- they would be processed twice otherwise
+        if not used_files[f] and not used_ids[id] then
+          ebookutils.copy(f, outputdir .. "/"..f)
+          table.insert(opf_complete,p)
+        end
+        used_ids[id] = true
 			end
 			local end_opf = h_second:read("*all")
 			local spine_items = {}
